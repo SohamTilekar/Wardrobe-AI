@@ -1,5 +1,7 @@
 # Wardrobe AI
 
+![Wardrobe AI Dashboard](docs/screenshots/app_dashboard.png)
+
 Wardrobe AI is a smart, local-first styling and cataloging coordinator. It digitizes your physical clothing inventory, tracks laundry cycles, scores outfit compatibility using structural fashion principles, and generates personalized, scenario-based daily recommendations.
 
 The application combines a lightweight, high-performance **FastAPI backend** with a **responsive, modern glassmorphism web interface** to manage your wardrobe without relying on external cloud databases.
