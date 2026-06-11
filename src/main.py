@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -5,16 +6,17 @@ from typing import Any, Dict, List, Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import storage
+import recommender
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("wardrobe_main")
 
-app = FastAPI(title="Smart Wardrobe Assistant")
+app = FastAPI(title="Smart Wardrobe Assistant", version="7.0")
 
 WORKSPACE_DIR = Path("/mnt/soham/soham_code/Wardrobe AI")
 SRC_DIR = WORKSPACE_DIR / "src"
@@ -44,13 +46,19 @@ async def read_root(request: Request):
 @app.get("/api/items")
 async def get_items():
     items = storage.load_all_items()
-    return list(items.values())
+    res = []
+    for item in items.values():
+        item_copy = dict(item)
+        item_copy["friend_votes"] = storage.get_votes(item["id"])
+        res.append(item_copy)
+    return res
 
 @app.get("/api/items/{item_id}")
 async def get_item(item_id: str):
     item = storage.load_item(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+    item["friend_votes"] = storage.get_votes(item_id)
     return item
 
 @app.put("/api/items/{item_id}")
@@ -79,8 +87,8 @@ async def log_wear(item_id: str, payload: Dict[str, Any]):
 
     date_str = payload.get("date", datetime.today().strftime("%Y-%m-%d"))
     dest      = payload.get("destination", "Casual")
-    dirt_level = payload.get("dirt_level", "light")   # clean | light | dirty
-    force_status = payload.get("force_status")        # "Dirty" or None
+    dirt_level = payload.get("dirt_level", "light")
+    force_status = payload.get("force_status")
 
     item.setdefault("wear_history", []).append({
         "date": date_str, "destination": dest, "dirt_level": dirt_level
@@ -88,15 +96,13 @@ async def log_wear(item_id: str, payload: Dict[str, Any]):
     item["wear_count"] = item.get("wear_count", 0) + 1
     item["last_worn"]  = date_str
 
-    # Determine new status
     if force_status:
         item["status"] = force_status
     elif dirt_level == "dirty":
         item["status"] = "Dirty"
     elif dirt_level == "clean":
-        pass  # keep current status, don't change
+        pass
     else:
-        # "light" — auto-dirty if hit laundry limit
         limit = item.get("laundry_limit", 3)
         if item["wear_count"] >= limit:
             item["status"] = "Dirty"
@@ -118,18 +124,14 @@ async def log_wash(item_id: str, payload: Dict[str, Any]):
 
 @app.post("/api/items/{item_id}/vote")
 async def vote_item(item_id: str, payload: Dict[str, Any]):
-    item = storage.load_item(item_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
     entry = {
         "friend": payload.get("friend", "Anonymous"),
         "vote":   payload.get("vote", "liked"),
         "note":   payload.get("note"),
         "date":   payload.get("date", datetime.today().strftime("%Y-%m-%d")),
     }
-    item.setdefault("friend_votes", []).append(entry)
-    storage.save_item(item)
-    return item
+    storage.save_vote(item_id, entry)
+    return {"success": True}
 
 
 # ── Pairings CRUD ────────────────────────────────────────────
@@ -143,6 +145,7 @@ async def get_pairing(pairing_id: str):
     p = storage.load_pairing(pairing_id)
     if not p:
         raise HTTPException(status_code=404, detail="Pairing not found")
+    p["friend_votes"] = storage.get_votes(pairing_id)
     return p
 
 
@@ -150,7 +153,6 @@ async def get_pairing(pairing_id: str):
 
 @app.post("/api/pairings/{pairing_id}/wear")
 async def log_pairing_wear(pairing_id: str, payload: Dict[str, Any]):
-    """Log wear for every item in a pairing."""
     pairing = storage.load_pairing(pairing_id)
     if not pairing:
         raise HTTPException(status_code=404, detail="Pairing not found")
@@ -195,7 +197,6 @@ async def log_pairing_wear(pairing_id: str, payload: Dict[str, Any]):
 
 @app.post("/api/pairings/{pairing_id}/wash")
 async def log_pairing_wash(pairing_id: str, payload: Dict[str, Any]):
-    """Mark all items in a pairing clean."""
     pairing = storage.load_pairing(pairing_id)
     if not pairing:
         raise HTTPException(status_code=404, detail="Pairing not found")
@@ -217,11 +218,6 @@ async def log_pairing_wash(pairing_id: str, payload: Dict[str, Any]):
 
 @app.post("/api/pairings/{pairing_id}/vote")
 async def vote_pairing(pairing_id: str, payload: Dict[str, Any]):
-    """Record a friend vote on a pairing."""
-    pairing = storage.load_pairing(pairing_id)
-    if not pairing:
-        raise HTTPException(status_code=404, detail="Pairing not found")
-
     entry = {
         "friend":  payload.get("friend", "Anonymous"),
         "vote":    payload.get("vote", "liked"),
@@ -229,9 +225,8 @@ async def vote_pairing(pairing_id: str, payload: Dict[str, Any]):
         "item_id": payload.get("item_id"),
         "date":    payload.get("date", datetime.today().strftime("%Y-%m-%d")),
     }
-    pairing.setdefault("friend_votes", []).append(entry)
-    storage.save_pairing(pairing)
-    return pairing
+    storage.save_vote(pairing_id, entry)
+    return {"success": True}
 
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -254,66 +249,217 @@ def _pairing_item_ids(pairing: Dict[str, Any]) -> List[str]:
     return ids
 
 
-# ── Outfit suggestions ───────────────────────────────────────
+# ── Outfit suggestions (Streaming) ───────────────────────────
 
 @app.get("/api/outfits")
 async def get_outfit_suggestions(destination: str = "Casual"):
     all_items = storage.load_all_items()
     pairings  = storage.load_all_pairings().values()
     clean_items = {k: v for k, v in all_items.items() if v.get("status") == "Clean"}
-    outfits: List[Dict[str, Any]] = []
 
-    for p in pairings:
-        p_items = _pairing_item_ids(p)
-        if not p_items or not all(i in clean_items for i in p_items):
+    def outfit_generator():
+        outfits = []
+        for p in pairings:
+            p_items = _pairing_item_ids(p)
+            if not p_items or not all(i in clean_items for i in p_items):
+                continue
+
+            scores     = p.get("scores", {})
+            dest_score = scores.get(destination, 0)
+            if dest_score < 4:
+                continue
+
+            u = p.get("upper_half", {}) or {}
+
+            def resolve_layer(layer_data):
+                if not layer_data: return None
+                if isinstance(layer_data, str):
+                    obj = clean_items.get(layer_data)
+                    return {**obj, "layer_id": layer_data} if obj else None
+                if isinstance(layer_data, dict):
+                    obj = clean_items.get(layer_data["id"])
+                    if not obj: return None
+                    return {**obj, "tuck": layer_data.get("tuck"), "sleeves": layer_data.get("sleeves")}
+                return None
+
+            last_worn = p.get("last_worn")
+            if last_worn:
+                days_ago = (datetime.today() - datetime.strptime(last_worn, "%Y-%m-%d")).days
+                recency_bonus = min(1.5, days_ago * 0.05)
+            else:
+                recency_bonus = 2.0
+
+            final_score = round(dest_score + recency_bonus, 2)
+
+            outfits.append({
+                "pairing_id":  p.get("id"),
+                "score":       final_score,
+                "dest_score":  dest_score,
+                "scores":      scores,
+                "last_worn":   last_worn,
+                "friend_votes": storage.get_votes(p.get("id")),
+                "topest_layer": resolve_layer(u.get("topest_layer")),
+                "upper_layer":  resolve_layer(u.get("upper_layer")),
+                "medium_layer": resolve_layer(u.get("medium_layer")),
+                "bottom_layer": resolve_layer(u.get("bottom_layer")),
+                "bottom_half":  resolve_layer(p.get("bottom_half")),
+                "footwear":     resolve_layer(p.get("footwear")),
+                "item_ids":    p_items,
+            })
+
+        outfits.sort(key=lambda x: x["score"], reverse=True)
+        # Yield as NDJSON
+        for out in outfits[:20]:
+            yield json.dumps(out) + "\n"
+
+    return StreamingResponse(outfit_generator(), media_type="application/x-ndjson")
+
+
+# ── Today / Day Recommendations ───────────────────────────────
+
+VALID_DAY_TYPES = {"college", "outing", "trek", "holiday"}
+VALID_SLOTS     = {"casual", "home", "around_home"}
+VALID_DIRT      = {"clean", "light", "dirty"}
+
+@app.get("/api/today")
+async def get_today_recommendations(day_type: str = "college"):
+    """Get smart outfit recommendations for today by slot."""
+    if day_type not in VALID_DAY_TYPES:
+        raise HTTPException(400, f"day_type must be one of {sorted(VALID_DAY_TYPES)}")
+    result = recommender.recommend_today(day_type)
+    return result
+
+
+@app.get("/api/days")
+async def get_day_log(date: str = None):
+    """Get logged outfits for a specific date (default: today)."""
+    date_str = date or datetime.today().strftime("%Y-%m-%d")
+    log = recommender.load_day_log(date_str)
+    return log or {"date": date_str, "day_type": None, "slots": []}
+
+
+@app.post("/api/days/log")
+async def log_day_outfit(payload: Dict[str, Any]):
+    """Log a worn pairing for a slot on a day. Also logs wear on all items."""
+    date_str   = payload.get("date", datetime.today().strftime("%Y-%m-%d"))
+    day_type   = payload.get("day_type", "college")
+    slot       = payload.get("slot")
+    pairing_id = payload.get("pairing_id")
+    dirt_level = payload.get("dirt_level", "light")
+    notes      = payload.get("notes", "")
+
+    if not slot or slot not in VALID_SLOTS:
+        raise HTTPException(400, f"slot must be one of {sorted(VALID_SLOTS)}")
+    if not pairing_id:
+        raise HTTPException(400, "pairing_id is required")
+    if dirt_level not in VALID_DIRT:
+        raise HTTPException(400, f"dirt_level must be one of {sorted(VALID_DIRT)}")
+
+    # Verify pairing exists
+    pairing = storage.load_pairing(pairing_id)
+    if not pairing:
+        raise HTTPException(404, "Pairing not found")
+
+    # Revert existing wear log for this slot to avoid double-counting
+    recommender.revert_slot_wear(date_str, slot)
+
+    # Map slot → destination for wear logging
+    slot_dest_map = {"casual": "Casual", "home": "Home", "around_home": "around home"}
+    dest = slot_dest_map.get(slot, "Casual")
+
+    # Log wear on each item in the pairing
+    item_ids = _pairing_item_ids(pairing)
+    for item_id in item_ids:
+        item = storage.load_item(item_id)
+        if not item:
             continue
-
-        scores     = p.get("scores", {})
-        dest_score = scores.get(destination, 0)
-        if dest_score < 4:
-            continue
-
-        u = p.get("upper_half", {}) or {}
-
-        def resolve_layer(layer_data):
-            if not layer_data: return None
-            if isinstance(layer_data, str):
-                obj = clean_items.get(layer_data)
-                return {**obj, "layer_id": layer_data} if obj else None
-            if isinstance(layer_data, dict):
-                obj = clean_items.get(layer_data["id"])
-                if not obj: return None
-                return {**obj, "tuck": layer_data.get("tuck"), "sleeves": layer_data.get("sleeves")}
-            return None
-
-        # Recency bonus
-        last_worn = p.get("last_worn")
-        if last_worn:
-            days_ago = (datetime.today() - datetime.strptime(last_worn, "%Y-%m-%d")).days
-            recency_bonus = min(1.5, days_ago * 0.05)
-        else:
-            recency_bonus = 2.0  # Never worn
-
-        final_score = round(dest_score + recency_bonus, 2)
-
-        outfits.append({
-            "pairing_id":  p.get("id"),
-            "score":       final_score,
-            "dest_score":  dest_score,
-            "scores":      scores,
-            "last_worn":   last_worn,
-            "friend_votes": p.get("friend_votes", []),
-            "topest_layer": resolve_layer(u.get("topest_layer")),
-            "upper_layer":  resolve_layer(u.get("upper_layer")),
-            "medium_layer": resolve_layer(u.get("medium_layer")),
-            "bottom_layer": resolve_layer(u.get("bottom_layer")),
-            "bottom_half":  resolve_layer(p.get("bottom_half")),
-            "footwear":     resolve_layer(p.get("footwear")),
-            "item_ids":    p_items,
+        item.setdefault("wear_history", []).append({
+            "date": date_str, "destination": dest,
+            "dirt_level": dirt_level, "slot": slot
         })
+        item["wear_count"] = item.get("wear_count", 0) + 1
+        item["last_worn"] = date_str
+        if dirt_level == "dirty":
+            item["status"] = "Dirty"
+        elif item["wear_count"] >= item.get("laundry_limit", 3):
+            item["status"] = "Dirty"
+        storage.save_item(item)
 
-    outfits.sort(key=lambda x: x["score"], reverse=True)
-    return outfits[:20]
+    # Log wear on pairing
+    pairing.setdefault("wear_history", []).append({
+        "date": date_str, "destination": dest, "slot": slot, "dirt_level": dirt_level
+    })
+    pairing["last_worn"] = date_str
+    storage.save_pairing(pairing)
+
+    # Save day log
+    day_log = recommender.log_day_wear(date_str, day_type, slot, pairing_id, dirt_level, notes)
+    return {"success": True, "day_log": day_log}
+
+
+@app.get("/api/days/history")
+async def get_day_history(days: int = 14):
+    """Return recent day logs (default last 14 days)."""
+    return recommender.get_day_history(min(days, 60))
+
+
+@app.delete("/api/days/{date}/slot/{slot}")
+async def delete_day_slot(date: str, slot: str):
+    """Remove a slot entry from a day log."""
+    if slot not in VALID_SLOTS:
+        raise HTTPException(400, f"slot must be one of {sorted(VALID_SLOTS)}")
+    log = recommender.load_day_log(date)
+    if not log:
+        raise HTTPException(404, "No log for that date")
+    
+    # Revert item/pairing stats first
+    recommender.revert_slot_wear(date, slot)
+    
+    log["slots"] = [s for s in log.get("slots", []) if s.get("slot") != slot]
+    recommender.save_day_log(log)
+    return {"success": True, "day_log": log}
+
+
+@app.post("/api/pairings/custom")
+async def create_custom_pairing(payload: Dict[str, Any]):
+    """Creates a custom pairing, scores it using styling guidelines, and saves it."""
+    upper_half = payload.get("upper_half", {})
+    bottom_half = payload.get("bottom_half")
+    footwear = payload.get("footwear")
+    
+    if not bottom_half:
+        raise HTTPException(400, "bottom_half is required")
+        
+    pairing_data = {
+        "upper_half": upper_half,
+        "bottom_half": bottom_half,
+        "footwear": footwear
+    }
+    
+    try:
+        new_pairing = recommender.score_and_save_custom_pairing(pairing_data)
+        
+        # Verify via programmatic validator to maintain safety
+        import subprocess
+        res = subprocess.run(["python3", "validate_wardrobe.py"], capture_output=True, text=True)
+        if res.returncode != 0:
+            # Revert saving if validation fails
+            storage.delete_pairing(new_pairing["id"])
+            # Remove from items pairing_ids as well
+            item_ids = _pairing_item_ids(new_pairing)
+            for iid in item_ids:
+                item = storage.load_item(iid)
+                if item and new_pairing["id"] in item.get("pairing_ids", []):
+                    item["pairing_ids"].remove(new_pairing["id"])
+                    storage.save_item(item)
+            storage.force_reload()
+            raise HTTPException(400, f"Invalid pairing according to validator: {res.stdout or res.stderr}")
+            
+        return new_pairing
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(500, f"Failed to create custom pairing: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -1,136 +1,350 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" class="dark">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wardrobe AI — Smart Styling Assistant</title>
-    <meta name="description" content="Your AI-powered wardrobe assistant for outfit coordination and clothing management.">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=6">
-</head>
-<body>
-    <div class="app-container">
-        <header class="glass-header">
-            <h1>Wardrobe AI</h1>
-            <p>Your intelligent styling assistant</p>
-        </header>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Wardrobe AI — Smart Styling Assistant</title>
+        <meta name="description" content="Your AI-powered wardrobe assistant for smart daily outfit decisions." />
+        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet" />
+        <link rel="stylesheet" href="/static/style.css?v=7" />
+    </head>
+    <body>
+        <div class="app-container">
+            <header class="glass-header">
+                <h1>Wardrobe AI</h1>
+                <p>Your intelligent styling assistant</p>
+            </header>
 
-        <nav class="tab-nav" role="tablist">
-            <button class="tab-btn active" id="tab-outfits-btn" role="tab" aria-selected="true" aria-controls="tab-outfits" onclick="switchTab('outfits')">
-                <span class="tab-icon">👗</span> Outfits
-            </button>
-            <button class="tab-btn" id="tab-wardrobe-btn" role="tab" aria-selected="false" aria-controls="tab-wardrobe" onclick="switchTab('wardrobe')">
-                <span class="tab-icon">🧺</span> Wardrobe
-            </button>
-        </nav>
+            <nav class="tab-nav" role="tablist">
+                <button class="tab-btn active" id="tab-today-btn" role="tab"
+                    aria-selected="true" aria-controls="tab-today" onclick="switchTab('today')">
+                    <span class="tab-icon">☀️</span> Today
+                </button>
+                <button class="tab-btn" id="tab-history-btn" role="tab"
+                    aria-selected="false" aria-controls="tab-history" onclick="switchTab('history')">
+                    <span class="tab-icon">📅</span> History
+                </button>
+                <button class="tab-btn" id="tab-outfits-btn" role="tab"
+                    aria-selected="false" aria-controls="tab-outfits" onclick="switchTab('outfits')">
+                    <span class="tab-icon">👗</span> Outfits
+                </button>
+                <button class="tab-btn" id="tab-wardrobe-btn" role="tab"
+                    aria-selected="false" aria-controls="tab-wardrobe" onclick="switchTab('wardrobe')">
+                    <span class="tab-icon">🧺</span> Wardrobe
+                </button>
+            </nav>
 
-        <main class="content">
-            <!-- OUTFITS TAB -->
-            <section id="tab-outfits" class="tab-panel active" role="tabpanel">
-                <div class="section-header">
-                    <h2>Suggested Outfits</h2>
-                    <div class="destination-selector">
-                        <label for="destination-select">Destination</label>
-                        <select id="destination-select" onchange="fetchOutfits()">
-                            <option value="Casual">Casual</option>
-                            <option value="Sleep">Sleep</option>
-                            <option value="Home">Home</option>
-                            <option value="Casual out/around home">Casual out / around home</option>
-                            <option value="Full formal">Full formal</option>
+            <main class="content">
+
+                <!-- ══ TODAY TAB ══════════════════════════════════════════ -->
+                <section id="tab-today" class="tab-panel active" role="tabpanel">
+
+                    <!-- Day type selector -->
+                    <div class="day-type-bar">
+                        <span class="day-type-label">Today is…</span>
+                        <div class="day-type-pills" id="day-type-pills">
+                            <button class="day-pill active" data-type="college" onclick="setDayType('college',this)">
+                                🎓 College
+                            </button>
+                            <button class="day-pill" data-type="outing" onclick="setDayType('outing',this)">
+                                🛍️ Outing
+                            </button>
+                            <button class="day-pill" data-type="trek" onclick="setDayType('trek',this)">
+                                🥾 Trek
+                            </button>
+                            <button class="day-pill" data-type="holiday" onclick="setDayType('holiday',this)">
+                                🏠 Holiday
+                            </button>
+                        </div>
+                        <span class="today-date" id="today-date-label"></span>
+                    </div>
+
+                    <!-- Today's already-logged outfits -->
+                    <div id="today-logged-bar" class="logged-bar" style="display:none">
+                        <div class="logged-bar-title">✅ Logged today</div>
+                        <div id="today-logged-slots" class="logged-slots-row"></div>
+                    </div>
+
+                    <!-- Slot panels -->
+                    <div id="today-slots" class="today-slots-grid"></div>
+
+                </section>
+
+                <!-- ══ HISTORY TAB ════════════════════════════════════════ -->
+                <section id="tab-history" class="tab-panel" role="tabpanel">
+                    <div class="section-header">
+                        <h2>Wear History</h2>
+                        <select id="history-days-select" class="select-mini" onchange="fetchHistory()">
+                            <option value="7">Last 7 days</option>
+                            <option value="14" selected>Last 14 days</option>
+                            <option value="30">Last 30 days</option>
+                        </select>
+                    </div>
+                    <div id="history-list" class="history-list">
+                        <div class="loading-state">Loading history…</div>
+                    </div>
+                </section>
+
+                <!-- ══ OUTFITS TAB ════════════════════════════════════════ -->
+                <section id="tab-outfits" class="tab-panel" role="tabpanel">
+                    <div class="section-header">
+                        <h2>Suggested Outfits</h2>
+                        <div class="destination-selector">
+                            <label for="destination-select">Destination</label>
+                            <select id="destination-select" onchange="fetchOutfits()">
+                                <option value="Casual">Casual</option>
+                                <option value="Sleep">Sleep</option>
+                                <option value="Home">Home</option>
+                                <option value="around home">around home</option>
+                                <option value="Full formal">Full formal</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="outfits-grid" class="grid">
+                        <div class="loading-state">Loading outfits…</div>
+                    </div>
+                </section>
+
+                <!-- ══ WARDROBE TAB ════════════════════════════════════════ -->
+                <section id="tab-wardrobe" class="tab-panel" role="tabpanel">
+                    <div class="section-header">
+                        <h2>Your Wardrobe</h2>
+                        <div class="wardrobe-filters">
+                            <button class="filter-btn active" onclick="filterItems('all', this)">All</button>
+                            <button class="filter-btn" onclick="filterItems('Clean', this)">Clean</button>
+                            <button class="filter-btn" onclick="filterItems('Dirty', this)">Dirty</button>
+                        </div>
+                    </div>
+                    <div id="items-grid" class="grid">
+                        <div class="loading-state">Loading wardrobe…</div>
+                    </div>
+                </section>
+
+            </main>
+        </div>
+
+        <!-- ── CREATE CUSTOM OUTFIT MODAL ────────────────────────── -->
+        <div id="custom-outfit-modal" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="custom-modal-title">
+            <div class="modal-box wide-modal" style="max-height: 90vh; display: flex; flex-direction: column; padding: 1.5rem;">
+                <h3 id="custom-modal-title" style="margin-bottom: 0.25rem;">✨ Create Custom Casual Outfit</h3>
+                <p class="modal-sub" style="margin-bottom: 1rem;">Coordinate your own pairing. Select items and styling details.</p>
+
+                <div class="custom-outfit-form" style="flex: 1; overflow-y: auto; padding-right: 0.5rem; display: grid; gap: 1rem;">
+                    <!-- Outer Layer -->
+                    <div class="form-group">
+                        <label for="custom-outer" style="display:block;margin-bottom:0.3rem;font-size:0.85rem;font-weight:600;">Outer Layer (Jacket, Blazer, Coat, etc.)</label>
+                        <select id="custom-outer" class="select-full" style="width:100%" onchange="updateCustomPreview()">
+                            <option value="">(None)</option>
+                        </select>
+                    </div>
+
+                    <!-- Upper Layer -->
+                    <div class="form-group">
+                        <label for="custom-upper" style="display:block;margin-bottom:0.3rem;font-size:0.85rem;font-weight:600;">Upper Layer (Button-down, Polo, Sweater, etc.)</label>
+                        <select id="custom-upper" class="select-full" style="width:100%" onchange="onCustomUpperChange()">
+                            <option value="">(None)</option>
+                        </select>
+                        <div class="custom-styling-options" id="custom-upper-style-row" style="display:none; gap:0.5rem; margin-top:0.4rem;">
+                            <select id="custom-upper-tuck" class="select-mini" onchange="updateCustomPreview()">
+                                <option value="untucked">Untucked</option>
+                                <option value="french tuck">French Tuck</option>
+                                <option value="fully tucked">Fully Tucked</option>
+                            </select>
+                            <select id="custom-upper-sleeves" class="select-mini" onchange="updateCustomPreview()">
+                                <option value="down">Sleeves Down</option>
+                                <option value="rolled">Sleeves Rolled</option>
+                                <option value="up">Sleeves Up</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Mid Layer -->
+                    <div class="form-group">
+                        <label for="custom-mid" style="display:block;margin-bottom:0.3rem;font-size:0.85rem;font-weight:600;">Mid Layer (T-Shirt, Button-down, Polo, etc.)</label>
+                        <select id="custom-mid" class="select-full" style="width:100%" onchange="onCustomMidChange()">
+                            <option value="">(None)</option>
+                        </select>
+                        <div class="custom-styling-options" id="custom-mid-style-row" style="display:none; gap:0.5rem; margin-top:0.4rem;">
+                            <select id="custom-mid-tuck" class="select-mini" onchange="updateCustomPreview()">
+                                <option value="untucked">Untucked</option>
+                                <option value="french tuck">French Tuck</option>
+                                <option value="fully tucked">Fully Tucked</option>
+                            </select>
+                            <select id="custom-mid-sleeves" class="select-mini" onchange="updateCustomPreview()">
+                                <option value="down">Sleeves Down</option>
+                                <option value="rolled">Sleeves Rolled</option>
+                                <option value="up">Sleeves Up</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Inner Layer -->
+                    <div class="form-group">
+                        <label for="custom-inner" style="display:block;margin-bottom:0.3rem;font-size:0.85rem;font-weight:600;">Inner / Base Layer (T-Shirt, Tank Top, etc.)</label>
+                        <select id="custom-inner" class="select-full" style="width:100%" onchange="updateCustomPreview()">
+                            <option value="">(None)</option>
+                        </select>
+                    </div>
+
+                    <!-- Bottom Half -->
+                    <div class="form-group">
+                        <label for="custom-bottom" style="display:block;margin-bottom:0.3rem;font-size:0.85rem;font-weight:600;">Bottom half (Jeans, Chinos, Cargo Pants, etc.) <span style="color:red">*</span></label>
+                        <select id="custom-bottom" class="select-full" style="width:100%" onchange="updateCustomPreview()">
+                            <option value="">Select bottom half...</option>
+                        </select>
+                    </div>
+
+                    <!-- Footwear -->
+                    <div class="form-group">
+                        <label for="custom-footwear" style="display:block;margin-bottom:0.3rem;font-size:0.85rem;font-weight:600;">Shoes / Footwear</label>
+                        <select id="custom-footwear" class="select-full" style="width:100%" onchange="updateCustomPreview()">
+                            <option value="">(None / Barefoot)</option>
                         </select>
                     </div>
                 </div>
-                <div id="outfits-grid" class="grid">
-                    <div class="loading-state">Loading outfits…</div>
-                </div>
-            </section>
 
-            <!-- WARDROBE TAB -->
-            <section id="tab-wardrobe" class="tab-panel" role="tabpanel">
-                <div class="section-header">
-                    <h2>Your Wardrobe</h2>
-                    <div class="wardrobe-filters">
-                        <button class="filter-btn active" onclick="filterItems('all', this)">All</button>
-                        <button class="filter-btn" onclick="filterItems('Clean', this)">Clean</button>
-                        <button class="filter-btn" onclick="filterItems('Dirty', this)">Dirty</button>
+                <!-- Preview Grid -->
+                <div class="custom-preview-section" style="margin-top: 1rem; flex-shrink: 0;">
+                    <div class="modal-section-label" style="margin-bottom:0.4rem;">Outfit Preview</div>
+                    <div id="custom-outfit-preview-strip" class="outfit-strip" style="background:rgba(0,0,0,0.15); padding:0.5rem; border-radius:8px; border:1px dashed var(--border); max-height: 150px; overflow-y: auto;">
+                        <div class="empty-state" style="padding:0.5rem 0; font-size:0.85rem; color:var(--text-muted);">No items selected yet.</div>
                     </div>
                 </div>
-                <div id="items-grid" class="grid">
-                    <div class="loading-state">Loading wardrobe…</div>
-                </div>
-            </section>
-        </main>
-    </div>
 
-    <!-- ── DIRTINESS MODAL ───────────────────────────────────── -->
-    <div id="dirt-modal" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="dirt-modal-title">
-        <div class="modal-box">
-            <h3 id="dirt-modal-title">How dirty did it get?</h3>
-            <p class="modal-sub">Choose the dirtiness level after wearing. This affects when the item needs washing.</p>
-            <div class="dirt-options" id="dirt-options">
-                <button class="dirt-btn" data-level="clean" onclick="selectDirt(this)">
-                    <span class="dirt-icon">✨</span>
-                    <span class="dirt-name">Still Clean</span>
-                    <span class="dirt-desc">Barely worn, no smell</span>
-                </button>
-                <button class="dirt-btn" data-level="light" onclick="selectDirt(this)">
-                    <span class="dirt-icon">🟡</span>
-                    <span class="dirt-name">Lightly Used</span>
-                    <span class="dirt-desc">Worn but fine for one more</span>
-                </button>
-                <button class="dirt-btn" data-level="dirty" onclick="selectDirt(this)">
-                    <span class="dirt-icon">🔴</span>
-                    <span class="dirt-name">Needs Wash</span>
-                    <span class="dirt-desc">Dirty / sweaty, wash now</span>
-                </button>
-            </div>
-            <div class="modal-actions">
-                <button class="btn btn-ghost" onclick="closeDirtModal()">Cancel</button>
-                <button class="btn btn-primary" id="dirt-confirm-btn" onclick="confirmWear()" disabled>Confirm</button>
+                <div class="modal-actions" style="margin-top:1rem; flex-shrink: 0;">
+                    <button class="btn btn-ghost" onclick="closeCustomOutfitModal()">Cancel</button>
+                    <button class="btn btn-primary" id="custom-save-btn" onclick="saveCustomOutfit()" disabled>
+                        ✨ Score & Wear Outfit
+                    </button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- ── FRIEND VOTE MODAL ─────────────────────────────────── -->
-    <div id="vote-modal" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="vote-modal-title">
-        <div class="modal-box">
-            <h3 id="vote-modal-title">👥 Friend Vote</h3>
-            <p class="modal-sub">Record what your friend thought about this outfit or a specific item.</p>
-            <div class="vote-form">
-                <div class="form-group">
-                    <label for="vote-friend-name">Friend's name <span style="color:var(--text-muted)">(optional)</span></label>
-                    <input type="text" id="vote-friend-name" class="text-input" placeholder="e.g. Raj, Priya…">
-                </div>
-                <div class="form-group">
-                    <label>Vote</label>
-                    <div class="vote-options" id="vote-options">
-                        <button class="vote-opt" data-vote="loved" onclick="selectVote(this)">❤️ Loved it</button>
-                        <button class="vote-opt" data-vote="liked" onclick="selectVote(this)">👍 Liked it</button>
-                        <button class="vote-opt" data-vote="neutral" onclick="selectVote(this)">😐 Neutral</button>
-                        <button class="vote-opt" data-vote="disliked" onclick="selectVote(this)">👎 Disliked</button>
+        <!-- ── WEAR SLOT MODAL ──────────────────────────────────── -->
+        <div id="slot-modal" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="slot-modal-title">
+            <div class="modal-box wide-modal">
+                <h3 id="slot-modal-title">Log this outfit</h3>
+                <p class="modal-sub" id="slot-modal-pairing-name"></p>
+
+                <!-- Slot Selector Section -->
+                <div id="slot-modal-select-section" style="margin-bottom: 1.25rem;">
+                    <div class="modal-section-label" style="margin-bottom: 0.5rem;">Which slot is this for?</div>
+                    <div class="slot-select-options" id="slot-select-options" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button class="slot-select-btn" data-slot="casual" onclick="selectSlotOption(this)">
+                            <span class="slot-icon">🎓</span> Casual
+                        </button>
+                        <button class="slot-select-btn" data-slot="home" onclick="selectSlotOption(this)">
+                            <span class="slot-icon">🏠</span> Home
+                        </button>
+                        <button class="slot-select-btn" data-slot="around_home" onclick="selectSlotOption(this)">
+                            <span class="slot-icon">🚪</span> Around Home
+                        </button>
                     </div>
                 </div>
-                <div class="form-group" id="item-vote-group">
-                    <label for="item-vote-select">About a specific item? <span style="color:var(--text-muted)">(optional)</span></label>
-                    <select id="item-vote-select" class="select-full">
-                        <option value="">Whole outfit</option>
-                    </select>
+
+                <div class="modal-section-label">How dirty did it get?</div>
+                <div class="dirt-options" id="slot-dirt-options">
+                    <button class="dirt-btn" data-level="clean" onclick="selectSlotDirt(this)">
+                        <span class="dirt-icon">✨</span>
+                        <span class="dirt-name">Still Clean</span>
+                        <span class="dirt-desc">Barely worn</span>
+                    </button>
+                    <button class="dirt-btn" data-level="light" onclick="selectSlotDirt(this)">
+                        <span class="dirt-icon">🟡</span>
+                        <span class="dirt-name">Lightly Used</span>
+                        <span class="dirt-desc">Fine for one more</span>
+                    </button>
+                    <button class="dirt-btn" data-level="dirty" onclick="selectSlotDirt(this)">
+                        <span class="dirt-icon">🔴</span>
+                        <span class="dirt-name">Needs Wash</span>
+                        <span class="dirt-desc">Dirty / sweaty</span>
+                    </button>
                 </div>
-                <div class="form-group">
-                    <label for="vote-note">Note <span style="color:var(--text-muted)">(optional)</span></label>
-                    <input type="text" id="vote-note" class="text-input" placeholder="Any comment…">
+
+                <!-- Notes Section -->
+                <div class="form-group" style="margin-top: 1.25rem;">
+                    <label for="slot-notes" style="display:block;margin-bottom:0.4rem;font-size:0.85rem;color:var(--text-muted)">Notes (optional)</label>
+                    <input type="text" id="slot-notes" class="text-input" placeholder="e.g. college class, grocery run, coding at home..." style="width:100%" />
                 </div>
-            </div>
-            <div class="modal-actions">
-                <button class="btn btn-ghost" onclick="closeVoteModal()">Cancel</button>
-                <button class="btn btn-primary" id="vote-confirm-btn" onclick="confirmVote()" disabled>Save Vote</button>
+
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" onclick="closeSlotModal()">Cancel</button>
+                    <button class="btn btn-primary" id="slot-confirm-btn" onclick="confirmSlotWear()" disabled>
+                        ✅ Log Outfit
+                    </button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- TOAST -->
-    <div id="toast" class="toast" aria-live="polite"></div>
+        <!-- ── DIRTINESS MODAL (legacy outfit tab) ─────────────── -->
+        <div id="dirt-modal" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="dirt-modal-title">
+            <div class="modal-box">
+                <h3 id="dirt-modal-title">How dirty did it get?</h3>
+                <p class="modal-sub">Choose the dirtiness level after wearing.</p>
+                <div class="dirt-options" id="dirt-options">
+                    <button class="dirt-btn" data-level="clean" onclick="selectDirt(this)">
+                        <span class="dirt-icon">✨</span>
+                        <span class="dirt-name">Still Clean</span>
+                        <span class="dirt-desc">Barely worn, no smell</span>
+                    </button>
+                    <button class="dirt-btn" data-level="light" onclick="selectDirt(this)">
+                        <span class="dirt-icon">🟡</span>
+                        <span class="dirt-name">Lightly Used</span>
+                        <span class="dirt-desc">Worn but fine for one more</span>
+                    </button>
+                    <button class="dirt-btn" data-level="dirty" onclick="selectDirt(this)">
+                        <span class="dirt-icon">🔴</span>
+                        <span class="dirt-name">Needs Wash</span>
+                        <span class="dirt-desc">Dirty / sweaty, wash now</span>
+                    </button>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" onclick="closeDirtModal()">Cancel</button>
+                    <button class="btn btn-primary" id="dirt-confirm-btn" onclick="confirmWear()" disabled>Confirm</button>
+                </div>
+            </div>
+        </div>
 
-    <script src="/static/app.js?v=6"></script>
-</body>
+        <!-- ── FRIEND VOTE MODAL ─────────────────────────────────── -->
+        <div id="vote-modal" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="vote-modal-title">
+            <div class="modal-box">
+                <h3 id="vote-modal-title">👥 Friend Vote</h3>
+                <p class="modal-sub">Record what your friend thought about this outfit.</p>
+                <div class="vote-form">
+                    <div class="form-group">
+                        <label for="vote-friend-name">Friend's name <span style="color:var(--text-muted)">(optional)</span></label>
+                        <input type="text" id="vote-friend-name" class="text-input" placeholder="e.g. Raj, Priya…" />
+                    </div>
+                    <div class="form-group">
+                        <label>Vote</label>
+                        <div class="vote-options" id="vote-options">
+                            <button class="vote-opt" data-vote="loved" onclick="selectVote(this)">❤️ Loved it</button>
+                            <button class="vote-opt" data-vote="liked" onclick="selectVote(this)">👍 Liked it</button>
+                            <button class="vote-opt" data-vote="neutral" onclick="selectVote(this)">😐 Neutral</button>
+                            <button class="vote-opt" data-vote="disliked" onclick="selectVote(this)">👎 Disliked</button>
+                        </div>
+                    </div>
+                    <div class="form-group" id="item-vote-group">
+                        <label for="item-vote-select">About a specific item? <span style="color:var(--text-muted)">(optional)</span></label>
+                        <select id="item-vote-select" class="select-full">
+                            <option value="">Whole outfit</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="vote-note">Note <span style="color:var(--text-muted)">(optional)</span></label>
+                        <input type="text" id="vote-note" class="text-input" placeholder="Any comment…" />
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" onclick="closeVoteModal()">Cancel</button>
+                    <button class="btn btn-primary" id="vote-confirm-btn" onclick="confirmVote()" disabled>Save Vote</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TOAST -->
+        <div id="toast" class="toast" aria-live="polite"></div>
+
+        <script src="/static/app.js?v=7"></script>
+    </body>
 </html>
