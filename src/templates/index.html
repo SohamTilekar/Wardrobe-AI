@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wardrobe AI — Smart Styling Assistant</title>
+    <meta name="description" content="Your AI-powered wardrobe assistant for outfit coordination and clothing management.">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=6">
+</head>
+<body>
+    <div class="app-container">
+        <header class="glass-header">
+            <h1>Wardrobe AI</h1>
+            <p>Your intelligent styling assistant</p>
+        </header>
+
+        <nav class="tab-nav" role="tablist">
+            <button class="tab-btn active" id="tab-outfits-btn" role="tab" aria-selected="true" aria-controls="tab-outfits" onclick="switchTab('outfits')">
+                <span class="tab-icon">👗</span> Outfits
+            </button>
+            <button class="tab-btn" id="tab-wardrobe-btn" role="tab" aria-selected="false" aria-controls="tab-wardrobe" onclick="switchTab('wardrobe')">
+                <span class="tab-icon">🧺</span> Wardrobe
+            </button>
+        </nav>
+
+        <main class="content">
+            <!-- OUTFITS TAB -->
+            <section id="tab-outfits" class="tab-panel active" role="tabpanel">
+                <div class="section-header">
+                    <h2>Suggested Outfits</h2>
+                    <div class="destination-selector">
+                        <label for="destination-select">Destination</label>
+                        <select id="destination-select" onchange="fetchOutfits()">
+                            <option value="Casual">Casual</option>
+                            <option value="Sleep">Sleep</option>
+                            <option value="Home">Home</option>
+                            <option value="Casual out/around home">Casual out / around home</option>
+                            <option value="Full formal">Full formal</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="outfits-grid" class="grid">
+                    <div class="loading-state">Loading outfits…</div>
+                </div>
+            </section>
+
+            <!-- WARDROBE TAB -->
+            <section id="tab-wardrobe" class="tab-panel" role="tabpanel">
+                <div class="section-header">
+                    <h2>Your Wardrobe</h2>
+                    <div class="wardrobe-filters">
+                        <button class="filter-btn active" onclick="filterItems('all', this)">All</button>
+                        <button class="filter-btn" onclick="filterItems('Clean', this)">Clean</button>
+                        <button class="filter-btn" onclick="filterItems('Dirty', this)">Dirty</button>
+                    </div>
+                </div>
+                <div id="items-grid" class="grid">
+                    <div class="loading-state">Loading wardrobe…</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ── DIRTINESS MODAL ───────────────────────────────────── -->
+    <div id="dirt-modal" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="dirt-modal-title">
+        <div class="modal-box">
+            <h3 id="dirt-modal-title">How dirty did it get?</h3>
+            <p class="modal-sub">Choose the dirtiness level after wearing. This affects when the item needs washing.</p>
+            <div class="dirt-options" id="dirt-options">
+                <button class="dirt-btn" data-level="clean" onclick="selectDirt(this)">
+                    <span class="dirt-icon">✨</span>
+                    <span class="dirt-name">Still Clean</span>
+                    <span class="dirt-desc">Barely worn, no smell</span>
+                </button>
+                <button class="dirt-btn" data-level="light" onclick="selectDirt(this)">
+                    <span class="dirt-icon">🟡</span>
+                    <span class="dirt-name">Lightly Used</span>
+                    <span class="dirt-desc">Worn but fine for one more</span>
+                </button>
+                <button class="dirt-btn" data-level="dirty" onclick="selectDirt(this)">
+                    <span class="dirt-icon">🔴</span>
+                    <span class="dirt-name">Needs Wash</span>
+                    <span class="dirt-desc">Dirty / sweaty, wash now</span>
+                </button>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeDirtModal()">Cancel</button>
+                <button class="btn btn-primary" id="dirt-confirm-btn" onclick="confirmWear()" disabled>Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── FRIEND VOTE MODAL ─────────────────────────────────── -->
+    <div id="vote-modal" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="vote-modal-title">
+        <div class="modal-box">
+            <h3 id="vote-modal-title">👥 Friend Vote</h3>
+            <p class="modal-sub">Record what your friend thought about this outfit or a specific item.</p>
+            <div class="vote-form">
+                <div class="form-group">
+                    <label for="vote-friend-name">Friend's name <span style="color:var(--text-muted)">(optional)</span></label>
+                    <input type="text" id="vote-friend-name" class="text-input" placeholder="e.g. Raj, Priya…">
+                </div>
+                <div class="form-group">
+                    <label>Vote</label>
+                    <div class="vote-options" id="vote-options">
+                        <button class="vote-opt" data-vote="loved" onclick="selectVote(this)">❤️ Loved it</button>
+                        <button class="vote-opt" data-vote="liked" onclick="selectVote(this)">👍 Liked it</button>
+                        <button class="vote-opt" data-vote="neutral" onclick="selectVote(this)">😐 Neutral</button>
+                        <button class="vote-opt" data-vote="disliked" onclick="selectVote(this)">👎 Disliked</button>
+                    </div>
+                </div>
+                <div class="form-group" id="item-vote-group">
+                    <label for="item-vote-select">About a specific item? <span style="color:var(--text-muted)">(optional)</span></label>
+                    <select id="item-vote-select" class="select-full">
+                        <option value="">Whole outfit</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="vote-note">Note <span style="color:var(--text-muted)">(optional)</span></label>
+                    <input type="text" id="vote-note" class="text-input" placeholder="Any comment…">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeVoteModal()">Cancel</button>
+                <button class="btn btn-primary" id="vote-confirm-btn" onclick="confirmVote()" disabled>Save Vote</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toast" class="toast" aria-live="polite"></div>
+
+    <script src="/static/app.js?v=6"></script>
+</body>
+</html>
